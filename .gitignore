@@ -97,6 +97,10 @@ APIKeys.plist
 # macOS
 .DS_Store
 
+# Python
+__pycache__/
+*.pyc
+
 # Backup files
 *.swp
 *.bak
