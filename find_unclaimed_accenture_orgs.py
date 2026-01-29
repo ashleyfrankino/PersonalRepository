@@ -30,7 +30,20 @@ from datetime import datetime, timezone
 
 SPEND_THRESHOLD = 10_000  # default minimum spend in USD
 
-SOQL_QUERY = """
+
+# NOTE: Adjust the following to match your Salesforce schema:
+#   SPEND_FIELD  – the API name of the custom spend field on Account
+#                  (common alternatives: Annual_Spend__c, Total_Spend__c, Spend__c)
+#   OWNER_FILTER – the condition that identifies "unclaimed" accounts.
+#                  Common patterns:
+#                    Owner.Name = 'Unassigned'
+#                    OwnerId = null
+#                    Owner_Custom__c = 'Unclaimed'
+#                  Defaulting to OwnerId = null here as the safest general case.
+SPEND_FIELD = os.environ.get("SF_SPEND_FIELD", "Annual_Spend__c")
+OWNER_FILTER = os.environ.get("SF_OWNER_FILTER", "OwnerId = null")
+
+SOQL_TEMPLATE = """
 SELECT
     Id,
     Name,
@@ -46,12 +59,12 @@ SELECT
     Owner.Name,
     CreatedDate,
     LastModifiedDate,
-    Annual_Spend__c
+    {spend_field}
 FROM Account
 WHERE Name LIKE '%Accenture%'
-  AND Owner.Name = 'Unassigned'
-  AND Annual_Spend__c > {spend_threshold}
-ORDER BY Annual_Spend__c DESC
+  AND {owner_filter}
+  AND {spend_field} > {spend_threshold}
+ORDER BY {spend_field} DESC
 """.strip()
 
 
@@ -128,7 +141,7 @@ def flatten(record: dict) -> dict:
         "OwnerName": owner.get("Name"),
         "CreatedDate": record.get("CreatedDate"),
         "LastModifiedDate": record.get("LastModifiedDate"),
-        "AnnualSpend": record.get("Annual_Spend__c"),
+        "AnnualSpend": record.get(SPEND_FIELD),
     }
 
 
@@ -196,7 +209,11 @@ def main():
         sys.exit(1)
 
     # --- build & run query ---
-    query = SOQL_QUERY.format(spend_threshold=args.min_spend)
+    query = SOQL_TEMPLATE.format(
+        spend_field=SPEND_FIELD,
+        owner_filter=OWNER_FILTER,
+        spend_threshold=args.min_spend,
+    )
     print(f"[{datetime.now(timezone.utc).isoformat()}] Querying Salesforce...")
     print(f"  Instance : {instance_url}")
     print(f"  Threshold: ${args.min_spend:,.2f}")
